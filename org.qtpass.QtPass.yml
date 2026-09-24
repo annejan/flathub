@@ -1,17 +1,3 @@
-# SPDX-FileCopyrightText: 2026 Anne Jan Brouwer
-# SPDX-License-Identifier: GPL-3.0-or-later
-#
-# QtPass on the KDE 6 runtime, with git, pass, pwgen and qrencode bundled.
-#
-# GnuPG comes from the runtime. The sandboxed gpg keeps its own keyring
-# (persisted under ~/.var/app/org.qtpass.QtPass/.gnupg) but talks to the HOST
-# gpg-agent through the read-only exposed socket directory, so private keys,
-# pinentry and smartcards stay on the host. Import your public key once:
-#
-#   gpg --export --armor you@example.org | \
-#     flatpak run --command=gpg2 org.qtpass.QtPass --import
-#
-# or use Users -> Import key -> From clipboard inside QtPass.
 id: org.qtpass.QtPass
 runtime: org.kde.Platform
 runtime-version: "6.11"
@@ -25,15 +11,10 @@ finish-args:
   - --socket=fallback-x11
   - --socket=wayland
   - --device=dri
-  # git pull/push to remotes (https; add ssh-auth via Flatseal if you need ssh)
   - --share=network
-  # the pass default store location; pick another one through the file dialog
-  - --filesystem=~/.password-store:create
-  # host gpg-agent socket (connect works through a read-only bind mount)
   - --filesystem=xdg-run/gnupg:ro
-  # persistent keyring for the sandboxed gpg, at its default homedir
+  - --persist=.password-store
   - --persist=.gnupg
-  # tray icon
   - --talk-name=org.kde.StatusNotifierWatcher
 cleanup:
   - /include
@@ -99,7 +80,6 @@ modules:
   - name: qrencode
     buildsystem: cmake-ninja
     config-opts:
-      # 4.1.1 still says cmake_minimum_required(2.8); CMake 4 refuses that
       - -DCMAKE_POLICY_VERSION_MINIMUM=3.5
       - -DWITH_TOOLS=YES
       - -DWITH_TESTS=NO
@@ -119,7 +99,6 @@ modules:
     build-commands:
       - make PREFIX=/app WITH_ALLCOMP=no install
     sources:
-      # cgit snapshot tarballs are not checksum-stable; pin the tag's commit
       - type: git
         url: https://git.zx2c4.com/password-store
         tag: "1.7.4"
@@ -128,16 +107,9 @@ modules:
   - name: qtpass
     buildsystem: simple
     build-commands:
-      # the KDE SDK ships Qt 6 qmake as plain "qmake"
       - qmake PREFIX=/app CONFIG+=release qtpass.pro
       - make -j$FLATPAK_BUILDER_N_JOBS sub-src sub-main
-      # installs bin/qtpass, the desktop file, the metainfo and the hicolor
-      # icons under the upstream names; rename-desktop-file / rename-icon /
-      # rename-appdata-file rewrite them to the app id
       - make -C main install
-      # QtPassSettings::initExecutables() (and pass) look for "gpg2"; the runtime
-      # ships "gpg". The wrapper also scrubs sandbox-only env before the host
-      # gpg-agent sees it — see the comments in flatpak/gpg2.
       - install -Dm755 flatpak/gpg2 /app/bin/gpg2
     sources:
       - type: git
